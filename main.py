@@ -1,73 +1,72 @@
-from typing import List
-from fastapi import FastAPI
-from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
+from flask import Flask, jsonify, request
+from flask_sqlalchemy import SQLAlchemy
 
-Base = declarative_base()
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://user_postgres:postgres_password@0.0.0.0/db_store'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+#db.init_app(app)
 
+class Product(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(80), unique=True, nullable=False)
+    price = db.Column(db.Float, nullable=False)
 
-class Product(Base):
-    __tablename__ = 'products'
-    id = Column(Integer, primary_key=True)
-    name = Column(String, nullable=False)
-    price = Column(Integer, nullable=False)
-
-
-class CartProduct(Base):
-    __tablename__ = 'cart_products'
-    id = Column(Integer, primary_key=True)
-    product_id = Column(Integer, nullable=False)
-    quantity = Column(Integer, nullable=False)
+    def __repr__(self):
+        return '<Product %r>' % self.name
 
 
-class ProductIn(BaseModel):
-    name: str
-    price: int
+class Cart(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'),
+                           nullable=False)
+    product = db.relationship('Product', backref=db.backref('carts', lazy=True))
+    quantity = db.Column(db.Integer, nullable=False)
+
+    def __repr__(self):
+        return '<Cart %r>' % self.product.name
+
+with app.app_context():
+    db.create_all()
 
 
-class CartProductIn(BaseModel):
-    product_id: int
-    quantity: int
+@app.route('/products', methods=['GET'])
+def get_products():
+    products = Product.query.all()
+    product_list = []
+    for product in products:
+        product_list.append(
+            {'id': product.id, 'name': product.name, 'price': product.price})
+    return jsonify({'products': product_list})
 
 
-app = FastAPI()
-
-engine = create_engine('postgresql://user:password@localhost/dbname')
-Base.metadata.create_all(engine)
-Session = sessionmaker(bind=engine)
-
-
-@app.post('/product')
-def create_product(product: ProductIn):
-    session = Session()
-    new_product = Product(name=product.name, price=product.price)
-    session.add(new_product)
-    session.commit()
-    session.close()
-    return {'message': 'Product created'}
+@app.route('/products', methods=['POST'])
+def create_product():
+    product = Product(name=request.json['name'], price=request.json['price'])
+    db.session.add(product)
+    db.session.commit()
+    return jsonify({'product': {'id': product.id, 'name': product.name,
+                                'price': product.price}})
 
 
-@app.get('/products')
-def get_products(skip: int = 0, limit: int = 100, sort: str = 'asc', name: str = None):
-    session = Session()
-    products = session.query(Product).offset(skip).limit(limit)
-    if name:
-        products = products.filter(Product.name.like(f"%{name}%"))
-    if sort == 'asc':
-        products = products.order_by(Product.name)
-    else:
-        products = products.order_by(Product.name.desc())
-    return products
+@app.route('/carts', methods=['POST'])
+def add_to_cart():
+    cart = Cart(product_id=request.json['product_id'],
+                quantity=request.json['quantity'])
+    db.session.add(cart)
+    db.session.commit()
+    return jsonify({'cart': {'id': cart.id, 'product_id': cart.product_id,
+                             'quantity': cart.quantity}})
 
 
-@app.post('/cart')
-def add_to_cart(cart_product: CartProductIn):
-    session = Session()
-    new_cart_product = CartProduct(product_id=cart_product.product_id,
-                                   quantity=cart_product.quantity)
-    session.add(new_cart_product)
-    session.commit()
-    session.close()
-    return {'message': 'Product added to cart'}
+@app.route('/carts/<int:cart_id>', methods=['PUT'])
+def update_cart(cart_id):
+    cart = Cart.query.get(cart_id)
+    cart.quantity = request.json['quantity']
+    db.session.commit()
+    return jsonify({'cart': {'id': cart.id, 'product_id': cart.product_id,
+                             'quantity': cart.quantity}})
+
+if __name__ == '__main__':
+    app.run(debug=True) 
+

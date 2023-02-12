@@ -1,0 +1,14 @@
+version: '3'
+services:
+  db:
+    image: postgres
+    container_name: store-db
+    hostname: store-db
+    restart: always
+    environment:
+      POSTGRES_USER: user_postgres
+      POSTGRES_PASSWORD: postgres_password
+      POSTGRES_DB: db_store
+    ports:
+      - "5432:5432"
+
