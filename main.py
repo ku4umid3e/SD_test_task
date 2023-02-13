@@ -114,7 +114,7 @@ def update_cart_item(cart_id):
     cart = Cart.query.get(cart_id)
     cart.quantity = data['quantity']
     db.session.commit()
-    return jsonify({'id': cart.id}), 200
+    return jsonify({'id': cart.id, 'quatity': cart.quantity}), 200
 
 
 @app.route('/carts/<int:cart_id>', methods=['DELETE'])
