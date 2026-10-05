@@ -1,4 +1,3 @@
-version: '3'
 services:
   db:
     image: postgres
@@ -7,8 +6,8 @@ services:
     restart: always
     environment:
       POSTGRES_USER: user_postgres
-      POSTGRES_PASSWORD: postgres_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a new PostgreSQL password}
       POSTGRES_DB: db_store
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
 

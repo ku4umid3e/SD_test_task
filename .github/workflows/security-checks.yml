@@ -1,0 +1,28 @@
+name: Security checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SECRET_KEY: ci-only-generated-test-key-never-used-in-production-0123456789
+      DEBUG: "true"
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      DATABASE_URL: "sqlite:///:memory:"
+      API_TOKEN: ci-only-test-token-never-used-in-production-0123456789
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: "0.12.17"
+          python-version: "3.12"
+      - run: uv venv .venv && uv pip install -r requirements.txt
+      - name: Check application
+        working-directory: .
+        run: .venv/bin/python -m unittest discover -s tests

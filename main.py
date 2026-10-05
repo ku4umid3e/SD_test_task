@@ -1,9 +1,17 @@
+import hmac
+import os
+
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://user_postgres:postgres_password@0.0.0.0/db_store'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+if not app.config['SQLALCHEMY_DATABASE_URI']:
+    raise RuntimeError('Set DATABASE_URL in the process environment')
+API_TOKEN = os.environ.get('API_TOKEN', '')
+if len(API_TOKEN) < 32:
+    raise RuntimeError('Set a random API_TOKEN of at least 32 characters')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
@@ -29,8 +37,20 @@ class Cart(db.Model):
         return '<Cart {self.product.name}>'
 
 
-with app.app_context():
+@app.cli.command('init-db')
+def init_db():
+    """Initialize tables explicitly, never as an import side effect."""
     db.create_all()
+
+
+@app.before_request
+def require_api_token():
+    scheme, _, token = request.headers.get('Authorization', '').partition(' ')
+    if scheme.lower() != 'bearer' or not hmac.compare_digest(token.encode('utf-8'), API_TOKEN.encode('utf-8')):
+        response = jsonify({'error': 'Authentication required'})
+        response.status_code = 401
+        response.headers['WWW-Authenticate'] = 'Bearer'
+        return response
 
 
 # Работа с товарами в магазине.
@@ -60,12 +80,8 @@ def get_products():
     products = Product.query
     if search_query:
         products = products.filter(Product.name.ilike('%' + search_query + '%'))
-    if sort_by == 'name':
-        products = products.order_by(Product.name)
-    elif sort_by == 'price':
-        products = products.order_by(Product.price)
-    if order == 'desc':
-        products = products.desc()
+    column = Product.price if sort_by == 'price' else Product.name
+    products = products.order_by(column.desc() if order == 'desc' else column.asc())
     return jsonify([{'id': p.id, 'name': p.name, 'price': p.price} for p in products.all()]), 200
 
 
@@ -128,5 +144,5 @@ def delete_cart(cart_id):
 
 
 if __name__ == '__main__':
-    app.run(debug=True) 
+    app.run(host='127.0.0.1', debug=False)
 
